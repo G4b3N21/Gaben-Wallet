@@ -654,6 +654,145 @@
             render();
         }
 
+                function fmtEur(num) {
+            return (Number.isInteger(num) ? num : num.toFixed(2)) + ' €';
+        }
+
+        function formatDateLabel(dateStr) {
+            const today = new Date().toISOString().slice(0, 10);
+            const yestDate = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+            if (dateStr === today) return 'Today';
+            if (dateStr === yestDate) return 'Yesterday';
+            const d = new Date(dateStr + 'T00:00:00');
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+
+            function render() {
+            const year = viewDate.getFullYear();
+            const month = viewDate.getMonth();
+            const monthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`;
+            document.getElementById('monthLabel').innerText = viewDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+
+            const monthTxs = txs.filter(t => t.date && t.date.startsWith(monthPrefix));
+
+            let inc = 0, exp = 0, wantTotal = 0;
+            monthTxs.forEach(t => {
+                if (t.type === 'income') inc += t.amount;
+                else {
+                    exp += t.amount;
+                    wantTotal += (t.wantAmount || 0);
+                }
+            });
+            const needTotal = Math.max(0, exp - wantTotal);
+            const balance = inc - exp;
+
+            document.getElementById('totalIncome').innerText = `Income: +${fmtEur(inc)}`;
+            document.getElementById('totalExpense').innerText = `Expense: -${fmtEur(exp)}`;
+            const balEl = document.getElementById('totalBalance');
+            balEl.innerText = `${balance >= 0 ? '+' : ''}${fmtEur(balance)}`;
+            balEl.style.color = balance >= 0 ? 'var(--income)' : 'var(--expense)';
+
+            const left = monthlyLimit - exp;
+            const pct = Math.min(100, Math.round((exp / monthlyLimit) * 100));
+            const limitBar = document.getElementById('limitBar');
+            const limitText = document.getElementById('limitText');
+            limitBar.style.width = `${pct}%`;
+
+            if (left >= 0) {
+                limitText.innerText = `${fmtEur(left)} left of ${fmtEur(monthlyLimit)} limit`;
+                limitText.style.color = 'var(--text-main)';
+                limitBar.style.backgroundColor = pct > 85 ? '#F59E0B' : 'var(--accent)';
+            } else {
+                limitText.innerText = `Over limit by ${fmtEur(Math.abs(left))}!`;
+                limitText.style.color = 'var(--expense)';
+                limitBar.style.backgroundColor = 'var(--expense)';
+            }
+
+            document.getElementById('needText').innerText = `Need: ${fmtEur(needTotal)}`;
+            document.getElementById('wantText').innerText = `Want (Extra): ${fmtEur(wantTotal)}`;
+            if (exp > 0) {
+                const needPct = Math.round((needTotal / exp) * 100);
+                document.getElementById('needBar').style.width = `${needPct}%`;
+                document.getElementById('wantBar').style.width = `${100 - needPct}%`;
+            } else {
+                document.getElementById('needBar').style.width = '50%';
+                document.getElementById('wantBar').style.width = '50%';
+            }
+
+            const banner = document.getElementById('filterBanner');
+            if (activeCatFilter && currentView === 'tx') {
+                banner.style.display = 'flex';
+                document.getElementById('filterBannerText').innerText = `Filtered: ${activeCatFilter}`;
+            } else {
+                banner.style.display = 'none';
+            }
+
+            const main = document.getElementById('mainContent');
+
+            if (currentView === 'cat') {
+                if (exp === 0) {
+                    main.innerHTML = `<div class="empty-state">No expenses recorded in this month yet.</div>`;
+                    return;
+                }
+                main.innerHTML = EXP_CATS.map(cat => {
+                    const sum = monthTxs.filter(t => t.type === 'expense' && t.category === cat).reduce((a, b) => a + b.amount, 0);
+                    const cPct = exp > 0 ? Math.round((sum / exp) * 100) : 0;
+                    return `
+                    <div class="cat-stat-card" onclick="filterByCategory('${cat}')">
+                        <div class="cat-stat-top">
+                            <span>${cat} <span style="color:var(--text-muted); font-weight:400;">(${cPct}%)</span></span>
+                            <span style="color:var(--expense);">-${fmtEur(sum)}</span>
+                        </div>
+                        <div class="bar-track" style="margin-bottom:0; height:6px;">
+                            <div class="bar-fill" style="width:${cPct}%;"></div>
+                        </div>
+                    </div>`;
+                }).join('');
+                return;
+            }
+
+            let filtered = monthTxs.filter(t => {
+                if (activeCatFilter && t.category !== activeCatFilter) return false;
+                if (searchQuery) {
+                    const hay = `${t.category} ${t.note || ''}`.toLowerCase();
+                    return hay.includes(searchQuery);
+                }
+                return true;
+            });
+
+            filtered.sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
+
+            if (filtered.length === 0) {
+                main.innerHTML = `<div class="empty-state">No transactions found.<br>Tap <b>+ Add</b> to record one.</div>`;
+                return;
+            }
+
+            let html = '';
+            let lastDate = '';
+            filtered.forEach(t => {
+                if (t.date !== lastDate) {
+                    html += `<div class="date-group-title">${formatDateLabel(t.date)}</div>`;
+                    lastDate = t.date;
+                }
+                const isInc = t.type === 'income';
+                const catClass = isInc ? 'cat-Income' : `cat-${t.category}`;
+                html += `
+                <div class="tx-card ${catClass}" onclick="openEditor('${t.id}')">
+                    <div class="tx-left">
+                        <div class="tx-cat">${escapeHtml(t.category)}</div>
+                        ${t.note ? `<div class="tx-note">${escapeHtml(t.note)}</div>` : ''}
+                    </div>
+                    <div class="tx-right">
+                        <div class="tx-amount" style="color:${isInc ? 'var(--income)' : 'var(--expense)'};">
+                            ${isInc ? '+' : '-'}${fmtEur(t.amount)}
+                        </div>
+                        ${(!isInc && t.wantAmount > 0) ? `<div class="tx-want-tag">Want: ${fmtEur(t.wantAmount)}</div>` : ''}
+                    </div>
+                </div>`;
+            });
+            main.innerHTML = html;
+        }
+
         function setTxType(type) {
             currentType = type;
             document.getElementById('btnTypeExp').className = 'type-btn' + (type === 'expense' ? ' active-exp' : '');
