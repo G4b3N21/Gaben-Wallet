@@ -494,6 +494,10 @@
         <div class="bar-track">
             <div class="bar-fill" id="limitBar" style="width:0%;"></div>
         </div>
+        <div class="nw-row" id="dailyStatsRow" style="margin-top:-6px; margin-bottom:12px; font-size:11px;">
+            <span id="avgDailyText">Avg spent: 0 € / day</span>
+            <span id="safeDailyText" style="color:var(--accent); font-weight:600;">Safe left: 0 € / day</span>
+        </div>
 
         <div class="nw-row">
             <span id="needText">Need: 0 €</span>
@@ -706,6 +710,29 @@
                 limitText.innerText = `Over limit by ${fmtEur(Math.abs(left))}!`;
                 limitText.style.color = 'var(--expense)';
                 limitBar.style.backgroundColor = 'var(--expense)';
+            }
+                
+            // Daily average & safe daily spend
+            const now = new Date();
+            const isCurrentMonth = (year === now.getFullYear() && month === now.getMonth());
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const daysPassed = isCurrentMonth ? now.getDate() : daysInMonth;
+            const daysLeft = isCurrentMonth ? Math.max(1, daysInMonth - now.getDate() + 1) : 0;
+
+            const avgPerDay = exp / Math.max(1, daysPassed);
+            document.getElementById('avgDailyText').innerText = `Avg spent: ${fmtEur(avgPerDay)} / day`;
+
+            const safeEl = document.getElementById('safeDailyText');
+            if (!isCurrentMonth) {
+                safeEl.innerText = `Month finished (${daysInMonth} days)`;
+                safeEl.style.color = 'var(--text-muted)';
+            } else if (left > 0) {
+                const safePerDay = left / daysLeft;
+                safeEl.innerText = `Safe left: ${fmtEur(safePerDay)} / day (${daysLeft}d)`;
+                safeEl.style.color = safePerDay < avgPerDay ? '#F59E0B' : 'var(--accent)';
+            } else {
+                safeEl.innerText = `Safe left: 0 € / day`;
+                safeEl.style.color = 'var(--expense)';
             }
 
             document.getElementById('needText').innerText = `Need: ${fmtEur(needTotal)}`;
