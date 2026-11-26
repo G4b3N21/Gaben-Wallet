@@ -354,6 +354,76 @@
             cursor: pointer;
             flex-shrink: 0;
         }
+        .type-switch {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .type-btn {
+            padding: 12px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: var(--bg-input);
+            color: var(--text-muted);
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .type-btn.active-exp {
+            background: rgba(248, 113, 113, 0.16);
+            border-color: var(--expense);
+            color: var(--expense);
+        }
+
+        .type-btn.active-inc {
+            background: rgba(52, 211, 153, 0.16);
+            border-color: var(--income);
+            color: var(--income);
+        }
+
+        input, select {
+            width: 100%;
+            background-color: var(--bg-input);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            border-radius: 12px;
+            padding: 13px 14px;
+            font-size: 16px;
+            font-family: inherit;
+            margin-bottom: 10px;
+            outline: none;
+            color-scheme: dark;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        input:focus, select:focus { border-color: var(--accent); }
+
+        .cat-select-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .cat-select-row select {
+            margin-bottom: 0;
+            flex: 1;
+        }
+
+        .quick-add-cat-btn {
+            background-color: var(--bg-input);
+            border: 1px solid var(--border);
+            color: var(--accent);
+            border-radius: 12px;
+            padding: 0 16px;
+            font-size: 22px;
+            font-weight: 700;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
 
         .want-box {
             background: var(--bg-input);
