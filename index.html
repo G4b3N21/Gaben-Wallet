@@ -658,9 +658,98 @@
             padding: 35px 15px;
             font-size: 14px;
         }
+
+                .pin-overlay {
+            position: fixed;
+            inset: 0;
+            background-color: var(--bg-main);
+            z-index: 9999;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .pin-overlay.open { display: flex; }
+
+        .pin-dots {
+            display: flex;
+            gap: 16px;
+            margin: 22px 0 32px 0;
+        }
+
+        .pin-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: 2px solid var(--accent);
+            background: transparent;
+            transition: background 0.15s ease, transform 0.15s ease;
+        }
+
+        .pin-dot.filled {
+            background: var(--accent);
+            transform: scale(1.1);
+        }
+
+        .pin-dot.error {
+            border-color: var(--expense);
+            background: var(--expense);
+        }
+
+        .pin-pad {
+            display: grid;
+            grid-template-columns: repeat(3, 74px);
+            gap: 14px;
+        }
+
+        .pin-key {
+            width: 74px;
+            height: 74px;
+            border-radius: 50%;
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            font-size: 26px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .pin-key:active {
+            background-color: var(--accent-soft);
+            border-color: var(--accent);
+        }
     </style>
 </head>
 <body>
+    <div id="pinLockScreen" class="pin-overlay">
+        <div style="font-size:22px; font-weight:800; letter-spacing:-0.5px;"><span style="color:var(--accent);">Gaben</span> Wallet</div>
+        <div id="pinPromptText" style="font-size:13px; color:var(--text-muted); margin-top:6px;">Enter 4-digit PIN</div>
+        <div class="pin-dots" id="pinDots">
+            <div class="pin-dot"></div>
+            <div class="pin-dot"></div>
+            <div class="pin-dot"></div>
+            <div class="pin-dot"></div>
+        </div>
+        <div class="pin-pad">
+            <button type="button" class="pin-key" onclick="pressPinDigit('1')">1</button>
+            <button type="button" class="pin-key" onclick="pressPinDigit('2')">2</button>
+            <button type="button" class="pin-key" onclick="pressPinDigit('3')">3</button>
+            <button type="button" class="pin-key" onclick="pressPinDigit('4')">4</button>
+            <button type="button" class="pin-key" onclick="pressPinDigit('5')">5</button>
+            <button type="button" class="pin-key" onclick="pressPinDigit('6')">6</button>
+            <button type="button" class="pin-key" onclick="pressPinDigit('7')">7</button>
+            <button type="button" class="pin-key" onclick="pressPinDigit('8')">8</button>
+            <button type="button" class="pin-key" onclick="pressPinDigit('9')">9</button>
+            <div style="width:74px;"></div>
+            <button type="button" class="pin-key" onclick="pressPinDigit('0')">0</button>
+            <button type="button" class="pin-key" style="font-size:20px; color:var(--text-muted);" onclick="backspacePin()">⌫</button>
+        </div>
+    </div>
 
     <header>
         <h1><span>Gaben</span> Wallet</h1>
@@ -793,6 +882,17 @@
                 <span style="font-size:11px; color:var(--text-muted);" id="recCountLabel">0 items</span>
             </div>
             <div class="cat-chip-list" id="recMgrList" style="margin-bottom:12px;"></div>
+            
+            <div class="cat-mgr-section">
+                <div class="cat-mgr-title">
+                    <span>App PIN Lock</span>
+                    <span id="pinStatusLabel" style="font-size:12px; color:var(--text-muted);">Off</span>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button type="button" class="btn-secondary" style="margin-bottom:0;" onclick="setupOrChangePin()">Set / Change PIN</button>
+                    <button type="button" id="disablePinBtn" class="btn-danger" style="margin-top:0; display:none;" onclick="disablePin()">Turn Off</button>
+                </div>
+            </div>
 
             <div class="cat-mgr-section">
                 <div class="cat-mgr-title">
@@ -1697,7 +1797,110 @@
             });
         }
 
+                const PIN_KEY = 'gaben_wallet_pin_hash_v1';
+        let pinBuffer = '';
+
+        async function hashPin(pin) {
+            const data = new TextEncoder().encode('gw_salt_' + pin);
+            const buf = await crypto.subtle.digest('SHA-256', data);
+            return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        function updatePinDots(isError = false) {
+            const dots = document.querySelectorAll('#pinDots .pin-dot');
+            dots.forEach((d, i) => {
+                d.classList.toggle('filled', i < pinBuffer.length);
+                d.classList.toggle('error', isError);
+            });
+        }
+
+        function checkPinLockOnOpen() {
+            const savedHash = localStorage.getItem(PIN_KEY);
+            updatePinUiStatus();
+            if (savedHash) {
+                pinBuffer = '';
+                updatePinDots(false);
+                document.getElementById('pinPromptText').innerText = 'Enter 4-digit PIN';
+                document.getElementById('pinLockScreen').classList.add('open');
+            }
+        }
+
+        async function pressPinDigit(digit) {
+            if (pinBuffer.length >= 4) return;
+            pinBuffer += digit;
+            updatePinDots(false);
+
+            if (pinBuffer.length === 4) {
+                const enteredHash = await hashPin(pinBuffer);
+                const savedHash = localStorage.getItem(PIN_KEY);
+                if (enteredHash === savedHash) {
+                    setTimeout(() => {
+                        document.getElementById('pinLockScreen').classList.remove('open');
+                        pinBuffer = '';
+                        updatePinDots(false);
+                    }, 120);
+                } else {
+                    document.getElementById('pinPromptText').innerText = 'Wrong PIN, try again';
+                    updatePinDots(true);
+                    setTimeout(() => {
+                        pinBuffer = '';
+                        updatePinDots(false);
+                        document.getElementById('pinPromptText').innerText = 'Enter 4-digit PIN';
+                    }, 550);
+                }
+            }
+        }
+
+        function backspacePin() {
+            if (pinBuffer.length > 0) {
+                pinBuffer = pinBuffer.slice(0, -1);
+                updatePinDots(false);
+            }
+        }
+
+        function updatePinUiStatus() {
+            const hasPin = !!localStorage.getItem(PIN_KEY);
+            const lbl = document.getElementById('pinStatusLabel');
+            const disBtn = document.getElementById('disablePinBtn');
+            if (lbl) {
+                lbl.innerText = hasPin ? 'Active ✓' : 'Off';
+                lbl.style.color = hasPin ? 'var(--income)' : 'var(--text-muted)';
+            }
+            if (disBtn) disBtn.style.display = hasPin ? 'block' : 'none';
+        }
+
+        async function setupOrChangePin() {
+            const p1 = prompt('Enter a new 4-digit PIN:');
+            if (p1 === null) return;
+            if (!/^\d{4}$/.test(p1.trim())) {
+                alert('Please enter exactly 4 digits (0-9).');
+                return;
+            }
+            const p2 = prompt('Confirm your 4-digit PIN:');
+            if (p1.trim() !== (p2 || '').trim()) {
+                alert('PINs do not match.');
+                return;
+            }
+            const h = await hashPin(p1.trim());
+            localStorage.setItem(PIN_KEY, h);
+            updatePinUiStatus();
+            alert('4-digit PIN enabled!');
+        }
+
+        function disablePin() {
+            if (!confirm('Turn off PIN lock?')) return;
+            localStorage.removeItem(PIN_KEY);
+            updatePinUiStatus();
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && localStorage.getItem(PIN_KEY)) {
+                checkPinLockOnOpen();
+            }
+        });
+
         init();
+        checkPinLockOnOpen();
     </script>
 </body>
 </html>
